@@ -1,0 +1,48 @@
+{
+  "name": "oc-stats",
+  "version": "1.1.0",
+  "description": "CLI tool to analyze OpenCode usage statistics",
+  "type": "module",
+  "bin": {
+    "oc-stats": "dist/bin.js"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsx src/bin.ts",
+    "start": "node dist/bin.js",
+    "test": "vitest run"
+  },
+  "keywords": [
+    "opencode",
+    "usage",
+    "statistics",
+    "cli"
+  ],
+  "license": "MIT",
+  "files": [
+    "dist"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/iSolitudinis/oc-stats.git"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "chalk": "^5.4.1",
+    "cli-table3": "^0.6.5",
+    "commander": "^13.1.0",
+    "date-fns": "^4.1.0",
+    "ora": "^9.3.0",
+    "tinyglobby": "^0.2.12",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsup": "^8.4.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "vitest": "^4.0.18"
+  }
+}
