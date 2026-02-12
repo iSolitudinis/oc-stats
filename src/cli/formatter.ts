@@ -1,8 +1,8 @@
 import chalk from "chalk";
 import Table from "cli-table3";
 
-import type { ModelStats, PeriodStats } from "./types";
-import { formatCost, formatNumber } from "./utils";
+import type { ModelStats, PeriodStats } from "../core/types";
+import { formatCost, formatNumber } from "../shared/format-utils";
 
 function right(content: string): { content: string; hAlign: "right" } {
   return { content, hAlign: "right" };
