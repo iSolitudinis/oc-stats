@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { runCli } from "../bin";
-import { formatCliError } from "../cli-error";
+import { runCli } from "../cli/bin";
+import { formatCliError } from "../cli/cli-error";
 
 describe("runCli", () => {
   it("rejects invalid date format", async () => {

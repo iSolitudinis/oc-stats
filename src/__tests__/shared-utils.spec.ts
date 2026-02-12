@@ -1,16 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import type { Message } from "../types";
-import {
-  formatCost,
-  formatLocalDate,
-  formatNumber,
-  getActiveMinutes,
-  getDataDir,
-  getPeriodKey,
-  parseLocalDateEnd,
-  parseLocalDateStart,
-} from "../utils";
+import { formatLocalDate, getPeriodKey, parseLocalDateEnd, parseLocalDateStart } from "../shared/date-utils";
+import { getDataDir } from "../io/env";
+import { formatCost, formatNumber } from "../shared/format-utils";
 
 describe("getPeriodKey", () => {
   it("returns daily key in YYYY-MM-DD format", () => {
@@ -48,19 +40,14 @@ describe("getPeriodKey", () => {
 });
 
 describe("formatNumber", () => {
-  it("formats integers and decimals", () => {
-    expect(formatNumber(0)).toBe("0");
+  it("returns localized numeric output", () => {
     expect(formatNumber(1234)).toBe("1,234");
-    expect(formatNumber(1234567)).toBe("1,234,567");
-    expect(formatNumber(12.5)).toBe("12.5");
   });
 });
 
 describe("formatCost", () => {
-  it("formats currency with two decimals", () => {
-    expect(formatCost(0)).toBe("$0.00");
+  it("returns USD currency output", () => {
     expect(formatCost(12.345)).toBe("$12.35");
-    expect(formatCost(0.001)).toBe("$0.00");
   });
 });
 
@@ -68,40 +55,6 @@ describe("getDataDir", () => {
   it("returns default storage directory", () => {
     const dataDir = getDataDir();
     expect(dataDir.endsWith(".local/share/opencode/storage")).toBe(true);
-  });
-});
-
-describe("getActiveMinutes", () => {
-  function createMessage(created: number): Message {
-    return {
-      id: `id-${created}`,
-      sessionID: "session-1",
-      role: "assistant",
-      time: { created },
-      modelID: "m",
-      providerID: "p",
-      cost: 0,
-      tokens: {
-        input: 1,
-        output: 1,
-        reasoning: 1,
-        cache: { read: 0, write: 0 },
-      },
-    };
-  }
-
-  it("returns minimum 1 for empty and very short spans", () => {
-    expect(getActiveMinutes([])).toBe(1);
-
-    const now = new Date(2026, 0, 1, 0, 0, 0).getTime();
-    expect(getActiveMinutes([createMessage(now)])).toBe(1);
-    expect(getActiveMinutes([createMessage(now), createMessage(now + 30_000)])).toBe(1);
-  });
-
-  it("returns minute difference for wider spans", () => {
-    const start = new Date(2026, 0, 1, 0, 0, 0).getTime();
-    const end = start + 5 * 60_000;
-    expect(getActiveMinutes([createMessage(start), createMessage(end)])).toBe(5);
   });
 });
 

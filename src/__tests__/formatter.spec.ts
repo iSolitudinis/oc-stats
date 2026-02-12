@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { formatModelTable, formatPeriodTable, formatTodaySummary } from "../formatter";
-import type { ModelStats, PeriodStats } from "../types";
+import { formatModelTable, formatPeriodTable, formatTodaySummary } from "../cli/formatter";
+import type { ModelStats, PeriodStats } from "../core/types";
 
 function periodStats(overrides: Partial<PeriodStats> = {}): PeriodStats {
   return {

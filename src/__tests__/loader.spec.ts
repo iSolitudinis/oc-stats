@@ -4,9 +4,9 @@ import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { forEachMessage } from "../loader";
-import type { Message } from "../types";
-import * as utils from "../utils";
+import * as env from "../io/env";
+import { forEachMessage } from "../io/loader";
+import type { Message } from "../core/types";
 
 function messageFixture(overrides: Partial<Message> & { id: string; sessionID: string; time: { created: number } }): Message {
   const { id, sessionID, time, ...rest } = overrides;
@@ -33,7 +33,7 @@ describe("forEachMessage", () => {
 
   beforeEach(async () => {
     tempRoot = await mkdtemp(join(tmpdir(), "opencode-usage-test-"));
-    vi.spyOn(utils, "getDataDir").mockReturnValue(tempRoot);
+    vi.spyOn(env, "getDataDir").mockReturnValue(tempRoot);
     await mkdir(join(tempRoot, "message", "session-a"), { recursive: true });
     await mkdir(join(tempRoot, "message", "session-b"), { recursive: true });
   });

@@ -5,8 +5,8 @@ import {
   createOverallAccumulator,
   createPeriodAccumulator,
   validateFilters,
-} from "../aggregator";
-import type { FilterOptions, Message } from "../types";
+} from "../core/aggregator";
+import type { FilterOptions, Message } from "../core/types";
 
 function mockMessage(
   overrides: Partial<Message> & { id: string; sessionID: string; time: { created: number } },
