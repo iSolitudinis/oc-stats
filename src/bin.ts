@@ -2,10 +2,15 @@ import { readFileSync } from "node:fs";
 import { Command } from "commander";
 import ora from "ora";
 
-import { aggregate, aggregateByModel, calculateOverall, validateFilters } from "./aggregator";
+import {
+  createModelAccumulator,
+  createOverallAccumulator,
+  createPeriodAccumulator,
+  validateFilters,
+} from "./aggregator";
 import { formatCliError } from "./cli-error";
 import { formatModelTable, formatPeriodTable, formatTodaySummary } from "./formatter";
-import { loadMessages } from "./loader";
+import { forEachMessage } from "./loader";
 import type { FilterOptions, Granularity } from "./types";
 import { formatLocalDate } from "./utils";
 
@@ -60,11 +65,13 @@ async function runPeriod(granularity: Granularity, options: CliOptions): Promise
   validateFilters(filters, true);
 
   const spinner = startSpinner("Loading OpenCode usage data...");
-  const messages = await loadMessages();
+  const accumulator = createPeriodAccumulator(granularity, filters);
+  await forEachMessage((message) => {
+    accumulator.consume(message);
+  });
   spinner.succeed();
 
-  const periods = aggregate(messages, granularity, filters);
-  const overall = calculateOverall(messages, filters);
+  const { periods, overall } = accumulator.result();
 
   console.log(formatPeriodTable(overall, periods));
 }
@@ -76,10 +83,13 @@ async function runToday(options: CliOptions): Promise<void> {
   validateFilters(todayFilters, true);
 
   const spinner = startSpinner("Loading OpenCode usage data...");
-  const messages = await loadMessages();
+  const accumulator = createOverallAccumulator(todayFilters);
+  await forEachMessage((message) => {
+    accumulator.consume(message);
+  });
   spinner.succeed();
 
-  const overall = calculateOverall(messages, todayFilters);
+  const overall = accumulator.result();
 
   console.log(formatTodaySummary(overall));
 }
@@ -89,11 +99,13 @@ async function runModels(options: CliOptions): Promise<void> {
   validateFilters(filters, true);
 
   const spinner = startSpinner("Loading OpenCode usage data...");
-  const messages = await loadMessages();
+  const accumulator = createModelAccumulator(filters);
+  await forEachMessage((message) => {
+    accumulator.consume(message);
+  });
   spinner.succeed();
 
-  const models = aggregateByModel(messages, filters);
-  const overall = calculateOverall(messages, filters);
+  const { models, overall } = accumulator.result();
 
   console.log(formatModelTable(overall, models));
 }

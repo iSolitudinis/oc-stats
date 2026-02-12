@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { loadMessages } from "../loader";
+import { forEachMessage } from "../loader";
 import type { Message } from "../types";
 import * as utils from "../utils";
 
@@ -28,7 +28,7 @@ function messageFixture(overrides: Partial<Message> & { id: string; sessionID: s
   };
 }
 
-describe("loadMessages", () => {
+describe("forEachMessage", () => {
   let tempRoot = "";
 
   beforeEach(async () => {
@@ -45,7 +45,7 @@ describe("loadMessages", () => {
     }
   });
 
-  it("reads valid assistant messages, skips invalid data, deduplicates, and sorts by time.created", async () => {
+  it("reads valid assistant messages, skips invalid data, and deduplicates", async () => {
     const valid1 = messageFixture({
       id: "id-1",
       sessionID: "session-a",
@@ -126,11 +126,13 @@ describe("loadMessages", () => {
 
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
 
-    const messages = await loadMessages();
+    const messages: Message[] = [];
+    await forEachMessage((message) => {
+      messages.push(message);
+    });
 
     expect(messages).toHaveLength(2);
-    expect(messages.map((m) => m.id)).toEqual(["id-2", "id-1"]);
-    expect(messages[0]?.time.created).toBeLessThan(messages[1]?.time.created ?? 0);
+    expect(messages.map((m) => m.id).sort()).toEqual(["id-1", "id-2"]);
     expect(messages.every((m) => m.role === "assistant")).toBe(true);
     expect(messages.every((m) => !!m.tokens)).toBe(true);
     expect(warnSpy).toHaveBeenCalledTimes(1);

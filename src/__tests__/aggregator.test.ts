@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { aggregate, aggregateByModel, calculateOverall, validateFilters } from "../aggregator";
+import {
+  createModelAccumulator,
+  createOverallAccumulator,
+  createPeriodAccumulator,
+  validateFilters,
+} from "../aggregator";
 import type { FilterOptions, Message } from "../types";
 
 function mockMessage(
@@ -18,6 +23,14 @@ function mockMessage(
 
 describe("aggregate", () => {
   const noFilters: FilterOptions = {};
+
+  function aggregate(messages: Message[], granularity: "daily" | "weekly" | "monthly" | "yearly", filters: FilterOptions) {
+    const accumulator = createPeriodAccumulator(granularity, filters);
+    for (const message of messages) {
+      accumulator.consume(message);
+    }
+    return accumulator.result().periods;
+  }
 
   it("groups by daily period and returns sorted periods", () => {
     const messages = [
@@ -143,6 +156,14 @@ describe("aggregate", () => {
 });
 
 describe("aggregateByModel", () => {
+  function aggregateByModel(messages: Message[], filters: FilterOptions) {
+    const accumulator = createModelAccumulator(filters);
+    for (const message of messages) {
+      accumulator.consume(message);
+    }
+    return accumulator.result().models;
+  }
+
   it("groups by providerID/modelID and sorts by totalTokens desc", () => {
     const messages = [
       mockMessage({
@@ -227,6 +248,14 @@ describe("aggregateByModel", () => {
 });
 
 describe("calculateOverall", () => {
+  function calculateOverall(messages: Message[], filters: FilterOptions) {
+    const accumulator = createOverallAccumulator(filters);
+    for (const message of messages) {
+      accumulator.consume(message);
+    }
+    return accumulator.result();
+  }
+
   it("sums tokens, cost, and requests correctly", () => {
     const messages = [
       mockMessage({

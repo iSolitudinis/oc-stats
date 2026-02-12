@@ -1,7 +1,6 @@
-import { readFile } from "node:fs/promises";
+import { opendir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import { glob } from "tinyglobby";
 import { z } from "zod";
 
 import type { Message } from "./types";
@@ -56,33 +55,72 @@ async function parseMessage(filePath: string): Promise<Message | null> {
   }
 }
 
-export async function loadMessages(): Promise<Message[]> {
-  const dataDir = getDataDir();
-  const pattern = join(dataDir, "message", "**", "*.json").replace(/\\/g, "/");
-  let files: string[];
+async function* iterateJsonFiles(dirPath: string): AsyncGenerator<string> {
+  let dir;
 
   try {
-    files = await glob(pattern, { onlyFiles: true, absolute: true });
+    dir = await opendir(dirPath);
+  } catch (error: unknown) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return;
+    }
+    throw error;
+  }
+
+  for await (const entry of dir) {
+    const entryPath = join(dirPath, entry.name);
+
+    if (entry.isDirectory()) {
+      yield* iterateJsonFiles(entryPath);
+      continue;
+    }
+
+    if (entry.isFile() && entry.name.endsWith(".json")) {
+      yield entryPath;
+    }
+  }
+}
+
+async function processBatch(
+  files: string[],
+  seenIds: Set<string>,
+  visitor: (message: Message) => void | Promise<void>,
+): Promise<void> {
+  const batchMessages = await Promise.all(files.map((filePath) => parseMessage(filePath)));
+
+  for (const message of batchMessages) {
+    if (!message || seenIds.has(message.id)) {
+      continue;
+    }
+
+    seenIds.add(message.id);
+    await visitor(message);
+  }
+}
+
+export async function forEachMessage(visitor: (message: Message) => void | Promise<void>): Promise<void> {
+  const dataDir = getDataDir();
+  const messageDir = join(dataDir, "message");
+
+  const seenIds = new Set<string>();
+  let files: string[] = [];
+
+  try {
+    for await (const filePath of iterateJsonFiles(messageDir)) {
+      files.push(filePath);
+      if (files.length < BATCH_SIZE) {
+        continue;
+      }
+
+      await processBatch(files, seenIds, visitor);
+      files = [];
+    }
+
+    if (files.length > 0) {
+      await processBatch(files, seenIds, visitor);
+    }
   } catch (error: unknown) {
     const reason = error instanceof Error ? error.message : "unknown error";
     throw new Error(`Failed to scan OpenCode message files in ${dataDir}: ${reason}`);
   }
-
-  const deduped = new Map<string, Message>();
-
-  for (let i = 0; i < files.length; i += BATCH_SIZE) {
-    const batch = files.slice(i, i + BATCH_SIZE);
-    const batchMessages = await Promise.all(batch.map((filePath) => parseMessage(filePath)));
-
-    for (const message of batchMessages) {
-      if (!message) {
-        continue;
-      }
-      if (!deduped.has(message.id)) {
-        deduped.set(message.id, message);
-      }
-    }
-  }
-
-  return [...deduped.values()].sort((a, b) => a.time.created - b.time.created);
 }

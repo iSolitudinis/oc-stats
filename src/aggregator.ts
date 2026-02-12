@@ -11,6 +11,18 @@ interface TokenTotals {
   cacheWriteTokens: number;
 }
 
+interface MutableStats extends TokenTotals {
+  totalRequests: number;
+  totalTokens: number;
+  totalCost: number;
+}
+
+interface ParsedFilters {
+  model?: string;
+  from?: number;
+  to?: number;
+}
+
 function createTokenTotals(): TokenTotals {
   return {
     inputTokens: 0,
@@ -18,6 +30,15 @@ function createTokenTotals(): TokenTotals {
     reasoningTokens: 0,
     cacheReadTokens: 0,
     cacheWriteTokens: 0,
+  };
+}
+
+function createMutableStats(): MutableStats {
+  return {
+    totalRequests: 0,
+    totalTokens: 0,
+    totalCost: 0,
+    ...createTokenTotals(),
   };
 }
 
@@ -59,6 +80,28 @@ function buildModelName(message: Message): string {
   return `${provider}/${model}`;
 }
 
+function parseFilters(filters: FilterOptions, includeModel: boolean): ParsedFilters {
+  validateFilters(filters, includeModel);
+  return {
+    model: filters.model,
+    from: parseDateStart(filters.from),
+    to: parseDateEnd(filters.to),
+  };
+}
+
+function matchesFilters(message: Message, filters: ParsedFilters, includeModel: boolean): boolean {
+  if (includeModel && filters.model && buildModelName(message) !== filters.model) {
+    return false;
+  }
+  if (filters.from !== undefined && message.time.created < filters.from) {
+    return false;
+  }
+  if (filters.to !== undefined && message.time.created > filters.to) {
+    return false;
+  }
+  return true;
+}
+
 export function validateFilters(filters: FilterOptions, includeModel: boolean): void {
   if (includeModel && filters.model !== undefined && filters.model.trim().length === 0) {
     throw new Error("Invalid model filter: --model cannot be empty.");
@@ -70,25 +113,6 @@ export function validateFilters(filters: FilterOptions, includeModel: boolean): 
   if (from !== undefined && to !== undefined && from > to) {
     throw new Error("Invalid date range: --from must be on or before --to.");
   }
-}
-
-function filterMessages(messages: Message[], filters: FilterOptions, includeModel: boolean): Message[] {
-  validateFilters(filters, includeModel);
-  const from = parseDateStart(filters.from);
-  const to = parseDateEnd(filters.to);
-
-  return messages.filter((message) => {
-    if (includeModel && filters.model && buildModelName(message) !== filters.model) {
-      return false;
-    }
-    if (from !== undefined && message.time.created < from) {
-      return false;
-    }
-    if (to !== undefined && message.time.created > to) {
-      return false;
-    }
-    return true;
-  });
 }
 
 function sumTokens(message: Message): number {
@@ -116,91 +140,130 @@ function applyMessageTotals(totals: TokenTotals, message: Message): void {
   totals.cacheWriteTokens += message.tokens.cache.write;
 }
 
-function calculatePeriodStats(period: string, messages: Message[]): PeriodStats {
-  const totals = createTokenTotals();
-  let totalCost = 0;
+function applyToMutableStats(totals: MutableStats, message: Message): void {
+  totals.totalRequests += 1;
+  applyMessageTotals(totals, message);
+  totals.totalTokens += sumTokens(message);
+  totals.totalCost += message.cost ?? 0;
+}
 
-  for (const message of messages) {
-    applyMessageTotals(totals, message);
-    totalCost += message.cost ?? 0;
-  }
-
-  const totalTokens = messages.reduce((sum, message) => sum + sumTokens(message), 0);
-
+function toPeriodStats(period: string, totals: MutableStats): PeriodStats {
   return {
     period,
-    totalRequests: messages.length,
-    totalTokens,
+    totalRequests: totals.totalRequests,
+    totalTokens: totals.totalTokens,
     inputTokens: totals.inputTokens,
     outputTokens: totals.outputTokens,
     cacheReadTokens: totals.cacheReadTokens,
     cacheWriteTokens: totals.cacheWriteTokens,
     reasoningTokens: totals.reasoningTokens,
-    totalCost,
+    totalCost: totals.totalCost,
   };
 }
 
-export function aggregate(messages: Message[], granularity: Granularity, filters: FilterOptions): PeriodStats[] {
-  const filtered = filterMessages(messages, filters, true);
-  const grouped = new Map<string, Message[]>();
+export function createPeriodAccumulator(
+  granularity: Granularity,
+  filters: FilterOptions,
+): {
+  consume(message: Message): void;
+  result(): { overall: PeriodStats; periods: PeriodStats[] };
+} {
+  const parsedFilters = parseFilters(filters, true);
+  const grouped = new Map<string, MutableStats>();
+  const overall = createMutableStats();
 
-  for (const message of filtered) {
-    const period = getPeriodKey(message.time.created, granularity);
-    const existing = grouped.get(period);
-    if (existing) {
-      existing.push(message);
-    } else {
-      grouped.set(period, [message]);
-    }
-  }
-
-  return [...grouped.entries()]
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([period, groupMessages]) => calculatePeriodStats(period, groupMessages));
-}
-
-export function aggregateByModel(messages: Message[], filters: FilterOptions): ModelStats[] {
-  const filtered = filterMessages(messages, filters, true);
-  const grouped = new Map<string, Message[]>();
-
-  for (const message of filtered) {
-    const model = buildModelName(message);
-    const existing = grouped.get(model);
-    if (existing) {
-      existing.push(message);
-    } else {
-      grouped.set(model, [message]);
-    }
-  }
-
-  return [...grouped.entries()]
-    .map(([model, groupMessages]) => {
-      const totals = createTokenTotals();
-      let totalCost = 0;
-
-      for (const message of groupMessages) {
-        applyMessageTotals(totals, message);
-        totalCost += message.cost ?? 0;
+  return {
+    consume(message: Message): void {
+      if (!matchesFilters(message, parsedFilters, true)) {
+        return;
       }
 
-      const totalTokens = groupMessages.reduce((sum, message) => sum + sumTokens(message), 0);
+      applyToMutableStats(overall, message);
+
+      const period = getPeriodKey(message.time.created, granularity);
+      const periodTotals = grouped.get(period) ?? createMutableStats();
+      applyToMutableStats(periodTotals, message);
+      grouped.set(period, periodTotals);
+    },
+    result(): { overall: PeriodStats; periods: PeriodStats[] } {
+      const periods = [...grouped.entries()]
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([period, totals]) => toPeriodStats(period, totals));
 
       return {
-        model,
-        totalRequests: groupMessages.length,
-        totalTokens,
-        inputTokens: totals.inputTokens,
-        outputTokens: totals.outputTokens,
-        cacheReadTokens: totals.cacheReadTokens,
-        cacheWriteTokens: totals.cacheWriteTokens,
-        reasoningTokens: totals.reasoningTokens,
-        totalCost,
+        overall: toPeriodStats("Total", overall),
+        periods,
       };
-    })
-    .sort((a, b) => b.totalTokens - a.totalTokens);
+    },
+  };
 }
 
-export function calculateOverall(messages: Message[], filters: FilterOptions): PeriodStats {
-  const filtered = filterMessages(messages, filters, true);
-  return calculatePeriodStats("Total", filtered);
+export function createModelAccumulator(
+  filters: FilterOptions,
+): {
+  consume(message: Message): void;
+  result(): { overall: PeriodStats; models: ModelStats[] };
+} {
+  const parsedFilters = parseFilters(filters, true);
+  const grouped = new Map<string, MutableStats>();
+  const overall = createMutableStats();
+
+  return {
+    consume(message: Message): void {
+      if (!matchesFilters(message, parsedFilters, true)) {
+        return;
+      }
+
+      applyToMutableStats(overall, message);
+
+      const model = buildModelName(message);
+      const modelTotals = grouped.get(model) ?? createMutableStats();
+      applyToMutableStats(modelTotals, message);
+      grouped.set(model, modelTotals);
+    },
+    result(): { overall: PeriodStats; models: ModelStats[] } {
+      const models = [...grouped.entries()]
+        .map(([model, totals]) => {
+          return {
+            model,
+            totalRequests: totals.totalRequests,
+            totalTokens: totals.totalTokens,
+            inputTokens: totals.inputTokens,
+            outputTokens: totals.outputTokens,
+            cacheReadTokens: totals.cacheReadTokens,
+            cacheWriteTokens: totals.cacheWriteTokens,
+            reasoningTokens: totals.reasoningTokens,
+            totalCost: totals.totalCost,
+          };
+        })
+        .sort((a, b) => b.totalTokens - a.totalTokens);
+
+      return {
+        overall: toPeriodStats("Total", overall),
+        models,
+      };
+    },
+  };
+}
+
+export function createOverallAccumulator(
+  filters: FilterOptions,
+): {
+  consume(message: Message): void;
+  result(): PeriodStats;
+} {
+  const parsedFilters = parseFilters(filters, true);
+  const overall = createMutableStats();
+
+  return {
+    consume(message: Message): void {
+      if (!matchesFilters(message, parsedFilters, true)) {
+        return;
+      }
+      applyToMutableStats(overall, message);
+    },
+    result(): PeriodStats {
+      return toPeriodStats("Total", overall);
+    },
+  };
 }

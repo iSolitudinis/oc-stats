@@ -35,7 +35,6 @@
     "commander": "^13.1.0",
     "date-fns": "^4.1.0",
     "ora": "^9.3.0",
-    "tinyglobby": "^0.2.12",
     "zod": "^4.3.6"
   },
   "devDependencies": {
