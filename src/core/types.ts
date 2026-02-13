@@ -1,17 +1,30 @@
 export interface Message {
   id: string;
   sessionID: string;
-  role: "user" | "assistant";
+  role: "assistant";
   time: { created: number; completed?: number };
-  modelID?: string;
-  providerID?: string;
-  cost?: number;
-  tokens?: {
+  error?: {
+    name: string;
+    data: Record<string, unknown>;
+  };
+  parentID: string;
+  modelID: string;
+  providerID: string;
+  mode: string;
+  path: {
+    cwd: string;
+    root: string;
+  };
+  summary?: boolean;
+  cost: number;
+  tokens: {
+    total?: number;
     input: number;
     output: number;
     reasoning: number;
     cache: { read: number; write: number };
   };
+  finish?: string;
 }
 
 export interface PeriodStats {

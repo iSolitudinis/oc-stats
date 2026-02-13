@@ -2,11 +2,8 @@ import { z } from "zod";
 
 import type { Message } from "../core/types";
 
-const MAX_TOKEN_VALUE = 1_000_000_000_000;
-const MAX_COST_VALUE = 1_000_000;
-
-function boundedNonNegativeNumber(max: number): z.ZodNumber {
-  return z.number().nonnegative().max(max);
+function nonNegativeNumber(): z.ZodNumber {
+  return z.number().nonnegative();
 }
 
 const AssistantMessageSchema = z.object({
@@ -17,18 +14,33 @@ const AssistantMessageSchema = z.object({
     created: z.number(),
     completed: z.number().optional(),
   }),
-  modelID: z.string().optional(),
-  providerID: z.string().optional(),
-  cost: boundedNonNegativeNumber(MAX_COST_VALUE).optional(),
+  error: z
+    .object({
+      name: z.string(),
+      data: z.record(z.string(), z.unknown()),
+    })
+    .optional(),
+  parentID: z.string(),
+  modelID: z.string(),
+  providerID: z.string(),
+  mode: z.string(),
+  path: z.object({
+    cwd: z.string(),
+    root: z.string(),
+  }),
+  summary: z.boolean().optional(),
+  cost: nonNegativeNumber(),
   tokens: z.object({
-    input: boundedNonNegativeNumber(MAX_TOKEN_VALUE),
-    output: boundedNonNegativeNumber(MAX_TOKEN_VALUE),
-    reasoning: boundedNonNegativeNumber(MAX_TOKEN_VALUE),
+    total: nonNegativeNumber().optional(),
+    input: nonNegativeNumber(),
+    output: nonNegativeNumber(),
+    reasoning: nonNegativeNumber(),
     cache: z.object({
-      read: boundedNonNegativeNumber(MAX_TOKEN_VALUE),
-      write: boundedNonNegativeNumber(MAX_TOKEN_VALUE),
+      read: nonNegativeNumber(),
+      write: nonNegativeNumber(),
     }),
   }),
+  finish: z.string().optional(),
 });
 
 export function isValidAssistantMessage(value: unknown): value is Message {

@@ -15,8 +15,14 @@ function messageFixture(overrides: Partial<Message> & { id: string; sessionID: s
     sessionID,
     role: "assistant",
     time,
+    parentID: "parent",
     modelID: "model",
     providerID: "provider",
+    mode: "default",
+    path: {
+      cwd: "/tmp",
+      root: "/tmp",
+    },
     cost: 0.1,
     tokens: {
       input: 1,
@@ -55,6 +61,13 @@ describe("forEachMessage", () => {
       id: "id-2",
       sessionID: "session-b",
       time: { created: Date.parse("2026-01-01T00:00:00.000Z") },
+      tokens: {
+        total: 999,
+        input: 1,
+        output: 2,
+        reasoning: 3,
+        cache: { read: 4, write: 5 },
+      },
     });
 
     const duplicateId = messageFixture({
@@ -73,6 +86,30 @@ describe("forEachMessage", () => {
       sessionID: "session-a",
       role: "assistant" as const,
       time: { created: Date.now() },
+      parentID: "parent",
+      modelID: "model",
+      providerID: "provider",
+      mode: "default",
+      path: { cwd: "/tmp", root: "/tmp" },
+      cost: 0.1,
+    };
+
+    const missingPath = {
+      id: "id-no-path",
+      sessionID: "session-a",
+      role: "assistant" as const,
+      time: { created: Date.now() },
+      parentID: "parent",
+      modelID: "model",
+      providerID: "provider",
+      mode: "default",
+      cost: 0.1,
+      tokens: {
+        input: 1,
+        output: 2,
+        reasoning: 3,
+        cache: { read: 4, write: 5 },
+      },
     };
 
     const negativeTokens = messageFixture({
@@ -94,8 +131,8 @@ describe("forEachMessage", () => {
       cost: -0.1,
     });
 
-    const tooLargeTokens = messageFixture({
-      id: "id-too-large-tokens",
+    const largeTokens = messageFixture({
+      id: "id-large-tokens",
       sessionID: "session-a",
       time: { created: Date.now() },
       tokens: {
@@ -106,8 +143,8 @@ describe("forEachMessage", () => {
       },
     });
 
-    const tooLargeCost = messageFixture({
-      id: "id-too-large-cost",
+    const largeCost = messageFixture({
+      id: "id-large-cost",
       sessionID: "session-a",
       time: { created: Date.now() },
       cost: 1_000_001,
@@ -118,11 +155,12 @@ describe("forEachMessage", () => {
     await writeFile(join(tempRoot, "message", "session-b", "03-duplicate.json"), JSON.stringify(duplicateId), "utf8");
     await writeFile(join(tempRoot, "message", "session-a", "04-user.json"), JSON.stringify(userMessage), "utf8");
     await writeFile(join(tempRoot, "message", "session-a", "05-no-tokens.json"), JSON.stringify(missingTokens), "utf8");
-    await writeFile(join(tempRoot, "message", "session-a", "06-negative-tokens.json"), JSON.stringify(negativeTokens), "utf8");
-    await writeFile(join(tempRoot, "message", "session-a", "07-negative-cost.json"), JSON.stringify(negativeCost), "utf8");
-    await writeFile(join(tempRoot, "message", "session-a", "08-too-large-tokens.json"), JSON.stringify(tooLargeTokens), "utf8");
-    await writeFile(join(tempRoot, "message", "session-a", "09-too-large-cost.json"), JSON.stringify(tooLargeCost), "utf8");
-    await writeFile(join(tempRoot, "message", "session-a", "10-invalid.json"), "{ not-json", "utf8");
+    await writeFile(join(tempRoot, "message", "session-a", "06-no-path.json"), JSON.stringify(missingPath), "utf8");
+    await writeFile(join(tempRoot, "message", "session-a", "07-negative-tokens.json"), JSON.stringify(negativeTokens), "utf8");
+    await writeFile(join(tempRoot, "message", "session-a", "08-negative-cost.json"), JSON.stringify(negativeCost), "utf8");
+    await writeFile(join(tempRoot, "message", "session-a", "09-large-tokens.json"), JSON.stringify(largeTokens), "utf8");
+    await writeFile(join(tempRoot, "message", "session-a", "10-large-cost.json"), JSON.stringify(largeCost), "utf8");
+    await writeFile(join(tempRoot, "message", "session-a", "11-invalid.json"), "{ not-json", "utf8");
 
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
 
@@ -131,8 +169,8 @@ describe("forEachMessage", () => {
       messages.push(message);
     });
 
-    expect(messages).toHaveLength(2);
-    expect(messages.map((m) => m.id).sort()).toEqual(["id-1", "id-2"]);
+    expect(messages).toHaveLength(4);
+    expect(messages.map((m) => m.id).sort()).toEqual(["id-1", "id-2", "id-large-cost", "id-large-tokens"]);
     expect(messages.every((m) => m.role === "assistant")).toBe(true);
     expect(messages.every((m) => !!m.tokens)).toBe(true);
     expect(warnSpy).toHaveBeenCalledTimes(1);

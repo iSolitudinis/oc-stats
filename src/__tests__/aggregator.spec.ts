@@ -13,8 +13,11 @@ function mockMessage(
 ): Message {
   return {
     role: "assistant",
+    parentID: "parent-id",
     modelID: "test-model",
     providerID: "test-provider",
+    mode: "default",
+    path: { cwd: "/tmp", root: "/tmp" },
     cost: 0.01,
     tokens: { input: 100, output: 50, reasoning: 10, cache: { read: 200, write: 0 } },
     ...overrides,
@@ -284,6 +287,27 @@ describe("calculateOverall", () => {
     expect(overall.cacheWriteTokens).toBe(55);
     expect(overall.totalTokens).toBe(165);
     expect(overall.totalCost).toBe(4);
+  });
+
+  it("ignores tokens.total and uses detailed token fields", () => {
+    const messages = [
+      mockMessage({
+        id: "m-total",
+        sessionID: "s",
+        cost: 1,
+        tokens: {
+          total: 99999,
+          input: 1,
+          output: 2,
+          reasoning: 3,
+          cache: { read: 4, write: 5 },
+        },
+        time: { created: new Date(2026, 0, 1, 10).getTime() },
+      }),
+    ];
+
+    const overall = calculateOverall(messages, {});
+    expect(overall.totalTokens).toBe(15);
   });
 
   it("applies model filter", () => {

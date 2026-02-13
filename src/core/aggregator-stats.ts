@@ -34,9 +34,6 @@ export function createMutableStats(): MutableStats {
 }
 
 function sumTokens(message: Message): number {
-  if (!message.tokens) {
-    return 0;
-  }
   return (
     message.tokens.input +
     message.tokens.output +
@@ -47,10 +44,6 @@ function sumTokens(message: Message): number {
 }
 
 function applyMessageTotals(totals: TokenTotals, message: Message): void {
-  if (!message.tokens) {
-    return;
-  }
-
   totals.inputTokens += message.tokens.input;
   totals.outputTokens += message.tokens.output;
   totals.reasoningTokens += message.tokens.reasoning;
@@ -62,7 +55,7 @@ export function applyToMutableStats(totals: MutableStats, message: Message): voi
   totals.totalRequests += 1;
   applyMessageTotals(totals, message);
   totals.totalTokens += sumTokens(message);
-  totals.totalCost += message.cost ?? 0;
+  totals.totalCost += message.cost;
 }
 
 export function toPeriodStats(period: string, totals: MutableStats): PeriodStats {
@@ -80,7 +73,5 @@ export function toPeriodStats(period: string, totals: MutableStats): PeriodStats
 }
 
 export function buildModelName(message: Message): string {
-  const provider = message.providerID ?? "unknown";
-  const model = message.modelID ?? "unknown";
-  return `${provider}/${model}`;
+  return `${message.providerID}/${message.modelID}`;
 }
